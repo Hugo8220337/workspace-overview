@@ -2,7 +2,7 @@
 
 A plugin for [Noctalia](https://github.com/noctalia-dev) v5 to see all workspaces and open windows at a glance, jump to any workspace with one click, and send windows from one workspace to another.
 
-![Workspace Overview panel showing a grid of workspaces with their windows](docs/demo.png)
+![Workspace Overview panel showing a grid of workspaces with their windows](docs/resources/demo.png)
 
 ## Requirements
 
