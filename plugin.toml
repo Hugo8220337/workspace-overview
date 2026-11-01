@@ -1,0 +1,31 @@
+id           = "hugo8220337/workspace-overview"
+name         = "Workspace Overview"
+version      = "1.0.0"
+plugin_api   = 24
+author       = "Hugo8220337"
+license      = "MIT"
+deprecated   = false
+icon         = "layout-grid"
+description  = "A plugin that provides an overview of all workspaces on their system. Being able to see all workspaces at once, swap between them, and even swap windows between workspaces."
+tags         = ["workspace", "overview"]
+dependencies = ["hyprctl", "niri", "swaymsg"]
+
+[[panel]]
+id        = "workspace-overview-panel"
+name      = "Workspace Overview"
+entry     = "panel.luau"
+placement = "floating"
+width     = 1092
+height    = 416
+
+[[setting]]
+key       = "max_workspaces"
+label_key = "settings.max_workspaces.label"
+type      = "int"
+default   = 10
+
+[[setting]]
+key       = "close_on_switch"
+label_key = "settings.close_on_switch.label"
+type      = "bool"
+default   = true

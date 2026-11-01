@@ -1,0 +1,12 @@
+[[plugin]]
+id           = "hugo8220337/workspace-overview"
+name         = "Workspace Overview"
+version      = "1.0.0"
+author       = "Hugo8220337"
+license      = "MIT"
+icon         = "layout-grid"
+description  = "A plugin that provides an overview of all workspaces on their system."
+deprecated   = false
+plugin_api   = 24
+tags         = ["workspace", "overview"]
+dependencies = ["hyprctl", "niri", "swaymsg"]
