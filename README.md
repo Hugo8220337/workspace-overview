@@ -67,6 +67,15 @@ mkdir -p ~/.local/share/noctalia/plugins/hugo8220337
 ln -sfn /path/to/workspace-overview ~/.local/share/noctalia/plugins/hugo8220337/workspace-overview
 ```
 
+To see plugin specific logs:
+```sh
+# Plugin specific logs
+journalctl --user -u noctalia -f | grep --line-buffered "workspace-overview"
+
+# Plugin + Noctalia motor logs
+journalctl --user -u noctalia -f | grep --line-buffered -E "workspace-overview|ERR|WRN|luau"
+```
+
 ## Roadmap
 
 - Drag and drop windows between workspaces (blocked until Noctalia adds drag and drop support; the move button is a temporary workaround)
