@@ -81,7 +81,7 @@ function ViewModel:switchToWorkspace(wsId: number)
     Model.switchToWorkspace(self.compositor, wsId, function(ok: boolean)
         Logger.info("switchToWorkspace resultado -> ok=" .. tostring(ok))
         if not ok then
-            self.errorMessage = "Falha ao mudar para o workspace " .. tostring(wsId)
+            self.errorMessage = "Failed to switch to workspace " .. tostring(wsId)
             self:notify()
             return
         end
@@ -98,7 +98,7 @@ function ViewModel:focusWindow(win: WindowInfo)
     Model.focusWindow(self.compositor, win, function(ok: boolean)
         Logger.info("focusWindow resultado -> ok=" .. tostring(ok))
         if not ok then
-            self.errorMessage = "Falha ao focar a janela '" .. win.title .. "'."
+            self.errorMessage = "Failed to focus window '" .. win.title .. "'."
             self:notify()
             return
         end
@@ -115,11 +115,11 @@ function ViewModel:handleWorkspaceClick(wsId: number)
     local sel = self.selectedWindow
     if sel ~= nil then
         if sel.workspaceId ~= wsId then
-            Logger.info("A mover janela " .. tostring(sel.id) .. " para workspace " .. tostring(wsId))
+            Logger.info("Moving window " .. tostring(sel.id) .. " to workspace " .. tostring(wsId))
             Model.moveWindowToWorkspace(self.compositor, sel, wsId, function(ok: boolean)
                 Logger.info("moveWindowToWorkspace resultado -> ok=" .. tostring(ok))
                 if not ok then
-                    self.errorMessage = "Falha ao mover janela."
+                    self.errorMessage = "Failed to move window."
                     self:notify()
                     return
                 end
@@ -127,7 +127,7 @@ function ViewModel:handleWorkspaceClick(wsId: number)
                 self:refresh()
             end)
         else
-            Logger.info("Mesmo workspace clicado; a cancelar seleção.")
+            Logger.info("Same workspace clicked; canceling selection.")
             self.selectedWindow = nil
             self:notify()
         end
