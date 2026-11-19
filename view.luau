@@ -1,12 +1,13 @@
 --!nonstrict
 
-local ViewModelModule = require("./viewmodel")
+local ViewModelModule = require("./viewmodel.luau")
 
 type ViewModel = ViewModelModule.ViewModel
 type WindowInfo = ViewModelModule.WindowInfo
 type WorkspaceInfo = ViewModelModule.WorkspaceInfo
 
 local View = {}
+local iconCache: { [string]: string } = {}
 
 local COLOR_WS_EMPTY = "surface_container_low"
 local COLOR_WS_ACTIVE = "surface_container_high"
@@ -33,9 +34,22 @@ local function isNonEmpty(val: any): boolean
     return type(val) == "string" and #val > 0
 end
 
+-- Caches the icon path for a given appId, using noctalia.appIconPath to resolve it if not already cached.
+-- avoids repeated calls to noctalia.appIconPath for the same appId, which can lead to CPU budget exceeded errors in Luau for large numbers of windows.
+local function getCachedIconPath(appId: string): string
+    local cached = iconCache[appId]
+    if cached ~= nil then
+        return cached
+    end
+    local path = noctalia.appIconPath(appId, 48)
+    local resolved = isNonEmpty(path) and path or ""
+    iconCache[appId] = resolved
+    return resolved
+end
+
 local function renderMiniWindow(vm: ViewModel, win: WindowInfo, w: number, h: number)
     local isSelected = vm.selectedWindow ~= nil and vm.selectedWindow.id == win.id
-    local iconPath = noctalia.appIconPath(win.appId, 48)
+    local iconPath = getCachedIconPath(win.appId)
 
     local centerIcon
     if isNonEmpty(iconPath) then
@@ -62,6 +76,10 @@ local function renderMiniWindow(vm: ViewModel, win: WindowInfo, w: number, h: nu
         borderCol = COLOR_WS_BORDER_FOCUSED
     end
 
+    local innerW = math.max(20, w - 10)
+    local bodyH = math.max(36, h - 34)
+
+    -- Sem onClick no contentor pai para não interferir com o botão arrows-move
     return ui.column({
         key = "win_" .. win.id,
         width = w,
@@ -73,12 +91,10 @@ local function renderMiniWindow(vm: ViewModel, win: WindowInfo, w: number, h: nu
         borderWidth = isSelected and 2 or 1,
         align = "center",
         justify = "space_between",
-        onClick = function()
-            vm:handleWorkspaceClick(win.workspaceId)
-        end,
     }, {
+        -- Barra superior com o botão de mover (irmão da área clicável)
         ui.row({
-            width = math.max(20, w - 10),
+            width = innerW,
             align = "center",
             justify = "space_between",
         }, {
@@ -98,11 +114,22 @@ local function renderMiniWindow(vm: ViewModel, win: WindowInfo, w: number, h: nu
                 end,
             }),
         }),
-        centerIcon,
-        ui.label({
-            text = truncate(win.title, math.max(8, math.floor(w / 8))),
-            fontSize = 10,
-            color = COLOR_TEXT_DIM,
+        -- Área clicável do programa (ícone + título)
+        ui.column({
+            width = innerW,
+            height = bodyH,
+            align = "center",
+            justify = "space_between",
+            onClick = function()
+                vm:handleWindowClick(win)
+            end,
+        }, {
+            centerIcon,
+            ui.label({
+                text = truncate(win.title, math.max(8, math.floor(w / 8))),
+                fontSize = 10,
+                color = COLOR_TEXT_DIM,
+            }),
         }),
     })
 end
@@ -192,7 +219,7 @@ local function renderWorkspaceTile(vm: ViewModel, ws: WorkspaceInfo)
         })
     end
 
-    return ui.column({
+    local tileProps: { [string]: any } = {
         key = "ws_" .. tostring(ws.id),
         width = tileW,
         height = tileH,
@@ -203,10 +230,16 @@ local function renderWorkspaceTile(vm: ViewModel, ws: WorkspaceInfo)
         borderWidth = borderW,
         align = "center",
         justify = "center",
-        onClick = function()
+    }
+
+    -- Só coloca onClick no tile se o workspace estiver vazio (evita cliques duplicados com as janelas)
+    if count == 0 then
+        tileProps.onClick = function()
             vm:handleWorkspaceClick(ws.id)
-        end,
-    }, {
+        end
+    end
+
+    return ui.column(tileProps, {
         contentNode,
     })
 end

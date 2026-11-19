@@ -1,8 +1,8 @@
 --!nonstrict
 
-local Logger = require("./utils/logger")
-local ViewModel = require("./viewmodel")
-local View = require("./view")
+local Logger = require("./utils/logger.luau")
+local ViewModel = require("./viewmodel.luau")
+local View = require("./view.luau")
 
 local vm = ViewModel.new()
 

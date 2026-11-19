@@ -1,6 +1,7 @@
 --!nonstrict
 
-local Model = require("./model")
+local Logger = require("./utils/logger.luau")
+local Model = require("./model.luau")
 
 export type WindowInfo = Model.WindowInfo
 export type WorkspaceInfo = Model.WorkspaceInfo
@@ -18,6 +19,7 @@ export type ViewModel = {
     switchToWorkspace: (self: ViewModel, wsId: number) -> (),
     focusWindow: (self: ViewModel, win: WindowInfo) -> (),
     handleWorkspaceClick: (self: ViewModel, wsId: number) -> (),
+    handleWindowClick: (self: ViewModel, win: WindowInfo) -> (),
     toggleSelectWindow: (self: ViewModel, win: WindowInfo) -> (),
     cancelSelection: (self: ViewModel) -> (),
     getStatusText: (self: ViewModel) -> string,
@@ -58,6 +60,8 @@ function ViewModel:refresh()
     end
 
     self.compositor = Model.detectCompositor()
+    Logger.info("refresh() -> compositor=" .. tostring(self.compositor))
+
     Model.fetchWorkspaces(
         self.compositor,
         function(workspaces: { WorkspaceInfo })
@@ -65,6 +69,7 @@ function ViewModel:refresh()
             self:notify()
         end,
         function(errMsg: string)
+            Logger.error("fetchWorkspaces falhou: " .. tostring(errMsg))
             self.errorMessage = errMsg
             self:notify()
         end
@@ -72,8 +77,15 @@ function ViewModel:refresh()
 end
 
 function ViewModel:switchToWorkspace(wsId: number)
+    Logger.info("switchToWorkspace -> wsId=" .. tostring(wsId))
     Model.switchToWorkspace(self.compositor, wsId, function(ok: boolean)
-        if ok and Model.shouldCloseOnSwitch() then
+        Logger.info("switchToWorkspace resultado -> ok=" .. tostring(ok))
+        if not ok then
+            self.errorMessage = "Falha ao mudar para o workspace " .. tostring(wsId)
+            self:notify()
+            return
+        end
+        if Model.shouldCloseOnSwitch() then
             panel.close()
         else
             self:refresh()
@@ -82,8 +94,15 @@ function ViewModel:switchToWorkspace(wsId: number)
 end
 
 function ViewModel:focusWindow(win: WindowInfo)
+    Logger.info("focusWindow -> id=" .. tostring(win.id) .. " app=" .. tostring(win.appId))
     Model.focusWindow(self.compositor, win, function(ok: boolean)
-        if ok and Model.shouldCloseOnSwitch() then
+        Logger.info("focusWindow resultado -> ok=" .. tostring(ok))
+        if not ok then
+            self.errorMessage = "Falha ao focar a janela '" .. win.title .. "'."
+            self:notify()
+            return
+        end
+        if Model.shouldCloseOnSwitch() then
             panel.close()
         else
             self:refresh()
@@ -92,10 +111,13 @@ function ViewModel:focusWindow(win: WindowInfo)
 end
 
 function ViewModel:handleWorkspaceClick(wsId: number)
+    Logger.info("handleWorkspaceClick -> wsId=" .. tostring(wsId))
     local sel = self.selectedWindow
     if sel ~= nil then
         if sel.workspaceId ~= wsId then
+            Logger.info("A mover janela " .. tostring(sel.id) .. " para workspace " .. tostring(wsId))
             Model.moveWindowToWorkspace(self.compositor, sel, wsId, function(ok: boolean)
+                Logger.info("moveWindowToWorkspace resultado -> ok=" .. tostring(ok))
                 if not ok then
                     self.errorMessage = "Falha ao mover janela."
                     self:notify()
@@ -105,6 +127,7 @@ function ViewModel:handleWorkspaceClick(wsId: number)
                 self:refresh()
             end)
         else
+            Logger.info("Mesmo workspace clicado; a cancelar seleção.")
             self.selectedWindow = nil
             self:notify()
         end
@@ -113,7 +136,18 @@ function ViewModel:handleWorkspaceClick(wsId: number)
     end
 end
 
+function ViewModel:handleWindowClick(win: WindowInfo)
+    Logger.info("handleWindowClick -> id=" .. tostring(win.id) .. " ws=" .. tostring(win.workspaceId))
+    local sel = self.selectedWindow
+    if sel ~= nil then
+        self:handleWorkspaceClick(win.workspaceId)
+    else
+        self:focusWindow(win)
+    end
+end
+
 function ViewModel:toggleSelectWindow(win: WindowInfo)
+    Logger.info("toggleSelectWindow -> id=" .. tostring(win.id))
     if self.selectedWindow ~= nil and self.selectedWindow.id == win.id then
         self.selectedWindow = nil
     else
@@ -123,6 +157,7 @@ function ViewModel:toggleSelectWindow(win: WindowInfo)
 end
 
 function ViewModel:cancelSelection()
+    Logger.info("cancelSelection")
     self.selectedWindow = nil
     self:notify()
 end
@@ -138,7 +173,7 @@ function ViewModel:getStatusText(): string
         end
         return "Moving '" .. title .. "' — click on the destination workspace."
     end
-    return "Click on a workspace to switch to it • Use the ✥ button on a window to move it to another workspace"
+    return "Click on a program to focus it • Use ✥ to move it to another workspace"
 end
 
 return ViewModel

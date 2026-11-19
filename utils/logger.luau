@@ -6,9 +6,9 @@ local PREFIX = "[workspace-overview]"
 
 local function writeLog(level: string, message: string)
     local formatted = string.format("%s [%s] %s", PREFIX, level, tostring(message))
-    if level == "ERROR" or level == "WARN" then
-        warn(formatted)
-    else
+    if type(noctalia) == "table" and type(noctalia.log) == "function" then
+        noctalia.log(formatted)
+    elseif type(print) == "function" then
         print(formatted)
     end
 end

@@ -1,5 +1,7 @@
 --!nonstrict
 
+local Logger = require("./utils/logger.luau")
+
 export type WindowInfo = {
     id: string,
     title: string,
@@ -21,59 +23,82 @@ function Model.isNonEmpty(val: any): boolean
     return type(val) == "string" and #val > 0
 end
 
-local function parseJsonPure(str: string): any
+-- Optimized JSON parser in Luau (uses string.find in C to avoid exceeding CPU budget)
+local function parseJsonFast(str: string): any
     local pos = 1
     local len = #str
 
     local function skipWhitespace()
-        while pos <= len do
-            local c = string.sub(str, pos, pos)
-            if c == " " or c == "\t" or c == "\n" or c == "\r" then
-                pos += 1
-            else
-                break
-            end
+        local _, e = string.find(str, "^[ \t\n\r]+", pos)
+        if e then
+            pos = e + 1
         end
     end
 
     local parseValue: () -> any
 
     local function parseString(): string
-        pos += 1
-        local out = {}
+        pos += 1 -- skips '"'
+        local startPos = pos
+        local out: { string }? = nil
+
         while pos <= len do
-            local c = string.sub(str, pos, pos)
+            local idx = string.find(str, '["\\]', pos)
+            if not idx then
+                break
+            end
+            local c = string.sub(str, idx, idx)
             if c == '"' then
-                pos += 1
-                return table.concat(out)
-            elseif c == "\\" then
-                pos += 1
-                local esc = string.sub(str, pos, pos)
-                table.insert(out, esc)
-                pos += 1
+                if out then
+                    if idx > startPos then
+                        table.insert(out, string.sub(str, startPos, idx - 1))
+                    end
+                    pos = idx + 1
+                    return table.concat(out)
+                else
+                    pos = idx + 1
+                    return string.sub(str, startPos, idx - 1)
+                end
             else
-                table.insert(out, c)
-                pos += 1
+                -- Caráter de escape '\'
+                if not out then
+                    out = {}
+                end
+                if idx > startPos then
+                    table.insert(out, string.sub(str, startPos, idx - 1))
+                end
+                local esc = string.sub(str, idx + 1, idx + 1)
+                if esc == "n" then
+                    table.insert(out, "\n")
+                elseif esc == "r" then
+                    table.insert(out, "\r")
+                elseif esc == "t" then
+                    table.insert(out, "\t")
+                elseif esc == "u" then
+                    idx += 4
+                else
+                    table.insert(out, esc)
+                end
+                pos = idx + 2
+                startPos = pos
             end
         end
-        return table.concat(out)
+        return out and table.concat(out) or string.sub(str, startPos, len)
     end
 
     local function parseNumber(): number
-        local startPos = pos
-        while pos <= len do
-            local c = string.sub(str, pos, pos)
-            if string.match(c, "[%d%+%-%.eE]") then
-                pos += 1
-            else
-                break
-            end
+        local _, e = string.find(str, "^[%d%+%-%.eE]+", pos)
+        if not e then
+            pos += 1
+            return 0
         end
-        return tonumber(string.sub(str, startPos, pos - 1)) or 0
+        local numStr = string.sub(str, pos, e)
+        pos = e + 1
+        return tonumber(numStr) or 0
     end
 
     local function parseArray(): { any }
-        pos += 1
+        pos += 1 -- salta '['
         local arr = {}
         skipWhitespace()
         if string.sub(str, pos, pos) == "]" then
@@ -98,7 +123,7 @@ local function parseJsonPure(str: string): any
     end
 
     local function parseObject(): { [string]: any }
-        pos += 1
+        pos += 1 -- skips '{'
         local obj: { [string]: any } = {}
         skipWhitespace()
         if string.sub(str, pos, pos) == "}" then
@@ -140,13 +165,13 @@ local function parseJsonPure(str: string): any
             return parseObject()
         elseif c == "[" then
             return parseArray()
-        elseif c == "t" and string.sub(str, pos, pos + 3) == "true" then
+        elseif c == "t" then
             pos += 4
             return true
-        elseif c == "f" and string.sub(str, pos, pos + 4) == "false" then
+        elseif c == "f" then
             pos += 5
             return false
-        elseif c == "n" and string.sub(str, pos, pos + 3) == "null" then
+        elseif c == "n" then
             pos += 4
             return nil
         else
@@ -158,6 +183,7 @@ local function parseJsonPure(str: string): any
     if ok then
         return result
     end
+    Logger.error("parseJsonFast falhou: " .. tostring(result))
     return nil
 end
 
@@ -165,13 +191,31 @@ function Model.decodeJson(raw: string?): any
     if not Model.isNonEmpty(raw) then
         return nil
     end
-    if type(noctalia) == "table" and type(noctalia.json) == "table" and type(noctalia.json.decode) == "function" then
-        local ok, res = pcall(noctalia.json.decode, raw :: string)
+
+    -- Try native decoders (C/Rust) if they exist in the runtime
+    -- this avoids "exceeded its CPU budget" errors in Luau for large JSON strings
+    if type(json) == "table" and type(json.decode) == "function" then
+        local ok, res = pcall(json.decode, raw :: string)
         if ok and type(res) == "table" then
             return res
         end
     end
-    return parseJsonPure(raw :: string)
+    if type(noctalia) == "table" then
+        if type(noctalia.json) == "table" and type(noctalia.json.decode) == "function" then
+            local ok, res = pcall(noctalia.json.decode, raw :: string)
+            if ok and type(res) == "table" then
+                return res
+            end
+        elseif type(noctalia.jsonDecode) == "function" then
+            local ok, res = pcall(noctalia.jsonDecode, raw :: string)
+            if ok and type(res) == "table" then
+                return res
+            end
+        end
+    end
+
+    -- Fallback to a fast Luau parser for JSON
+    return parseJsonFast(raw :: string)
 end
 
 function Model.detectCompositor(): string?
@@ -376,6 +420,9 @@ function Model.switchToWorkspace(compositor: string?, wsId: number, onDone: (boo
 
     if #cmd > 0 then
         noctalia.runAsync(cmd, function(res)
+            if res.exitCode ~= 0 then
+                Logger.logCommandFailure(cmd, res)
+            end
             onDone(res.exitCode == 0)
         end)
     else
@@ -400,6 +447,9 @@ function Model.focusWindow(compositor: string?, win: WindowInfo, onDone: (boolea
 
     if #cmd > 0 then
         noctalia.runAsync(cmd, function(res)
+            if res.exitCode ~= 0 then
+                Logger.logCommandFailure(cmd, res)
+            end
             onDone(res.exitCode == 0)
         end)
     else
@@ -453,6 +503,9 @@ function Model.moveWindowToWorkspace(
 
     if #cmd > 0 then
         noctalia.runAsync(cmd, function(res)
+            if res.exitCode ~= 0 then
+                Logger.logCommandFailure(cmd, res)
+            end
             onDone(res.exitCode == 0)
         end)
     else
