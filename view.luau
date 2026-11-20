@@ -9,14 +9,12 @@ type WorkspaceInfo = ViewModelModule.WorkspaceInfo
 local View = {}
 local iconCache: { [string]: string } = {}
 
-local COLOR_WS_EMPTY = "surface_container_low"
+local COLOR_TRANSPARENT = "#00000000"
 local COLOR_WS_ACTIVE = "surface_container_high"
-local COLOR_WS_BORDER = "outline_variant"
 local COLOR_WS_BORDER_FOCUSED = "primary"
 local COLOR_WS_BORDER_TARGET = "tertiary"
 local COLOR_WIN_BG = "surface"
-local COLOR_WIN_FOCUSED = "secondary_container"
-local COLOR_WIN_SELECTED = "primary_container"
+local COLOR_WIN_SELECTED = "surface_container_high"
 local COLOR_TEXT_MAIN = "on_surface"
 local COLOR_TEXT_DIM = "on_surface_variant"
 
@@ -34,8 +32,6 @@ local function isNonEmpty(val: any): boolean
     return type(val) == "string" and #val > 0
 end
 
--- Caches the icon path for a given appId, using noctalia.appIconPath to resolve it if not already cached.
--- avoids repeated calls to noctalia.appIconPath for the same appId, which can lead to CPU budget exceeded errors in Luau for large numbers of windows.
 local function getCachedIconPath(appId: string): string
     local cached = iconCache[appId]
     if cached ~= nil then
@@ -67,19 +63,21 @@ local function renderMiniWindow(vm: ViewModel, win: WindowInfo, w: number, h: nu
     end
 
     local bgFill = COLOR_WIN_BG
-    local borderCol = COLOR_WS_BORDER
+    local borderCol = COLOR_TRANSPARENT
+    local borderW = 0
     if isSelected then
         bgFill = COLOR_WIN_SELECTED
         borderCol = COLOR_WS_BORDER_TARGET
+        borderW = 2
     elseif win.focused then
-        bgFill = COLOR_WIN_FOCUSED
+        bgFill = COLOR_WIN_BG
         borderCol = COLOR_WS_BORDER_FOCUSED
+        borderW = 1
     end
 
     local innerW = math.max(20, w - 10)
     local bodyH = math.max(36, h - 34)
 
-    -- Sem onClick no contentor pai para não interferir com o botão arrows-move
     return ui.column({
         key = "win_" .. win.id,
         width = w,
@@ -88,11 +86,10 @@ local function renderMiniWindow(vm: ViewModel, win: WindowInfo, w: number, h: nu
         radius = 6,
         fill = bgFill,
         border = borderCol,
-        borderWidth = isSelected and 2 or 1,
+        borderWidth = borderW,
         align = "center",
         justify = "space_between",
     }, {
-        -- Barra superior com o botão de mover (irmão da área clicável)
         ui.row({
             width = innerW,
             align = "center",
@@ -114,7 +111,6 @@ local function renderMiniWindow(vm: ViewModel, win: WindowInfo, w: number, h: nu
                 end,
             }),
         }),
-        -- Área clicável do programa (ícone + título)
         ui.column({
             width = innerW,
             height = bodyH,
@@ -143,8 +139,8 @@ local function renderWorkspaceTile(vm: ViewModel, ws: WorkspaceInfo)
     local hasSelection = vm.selectedWindow ~= nil
     local isMoveTarget = hasSelection and (vm.selectedWindow :: WindowInfo).workspaceId ~= ws.id
 
-    local borderCol = COLOR_WS_BORDER
-    local borderW = 1
+    local borderCol = COLOR_TRANSPARENT
+    local borderW = 0
     if isMoveTarget then
         borderCol = COLOR_WS_BORDER_TARGET
         borderW = 2
@@ -225,14 +221,13 @@ local function renderWorkspaceTile(vm: ViewModel, ws: WorkspaceInfo)
         height = tileH,
         padding = 6,
         radius = 8,
-        fill = ws.focused and COLOR_WS_ACTIVE or COLOR_WS_EMPTY,
+        fill = if ws.focused then COLOR_WS_ACTIVE else COLOR_TRANSPARENT,
         border = borderCol,
         borderWidth = borderW,
         align = "center",
         justify = "center",
     }
 
-    -- Só coloca onClick no tile se o workspace estiver vazio (evita cliques duplicados com as janelas)
     if count == 0 then
         tileProps.onClick = function()
             vm:handleWorkspaceClick(ws.id)
